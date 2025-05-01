@@ -35,7 +35,7 @@ export async function POST(req:any) {
     }).sort({ date: -1 });
 
     // Transform data for Excel
-    const excelData = transactions.map(t => ({
+    const excelData = transactions.map((t:any) => ({
       Date: new Date(t.date).toLocaleDateString(),
       Name: t.name,
       Type: t.type,

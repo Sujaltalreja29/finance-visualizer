@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     
     // Calculate spending by category
     const spendingByCategory: Record<string, number> = {};
-transactions.forEach(transaction => {
+transactions.forEach((transaction : any) => {
   const { type, amount } = transaction;
   if (!spendingByCategory[type]) {
     spendingByCategory[type] = 0;
@@ -40,7 +40,7 @@ transactions.forEach(transaction => {
 });
     
     // Combine budget and spending data
-    const summary = budgets.map(budget => {
+    const summary = budgets.map((budget : any) => {
       const { category, amount } = budget;
       const spent = spendingByCategory[category] || 0;
       const remaining = amount - spent;
@@ -57,7 +57,7 @@ transactions.forEach(transaction => {
     
     // Add categories that have spending but no budget
     Object.keys(spendingByCategory).forEach(category => {
-      const hasBudget = summary.some((item) => item.category === category);
+      const hasBudget = summary.some((item: any) => item.category === category);
       if (!hasBudget) {
         summary.push({
           category,
