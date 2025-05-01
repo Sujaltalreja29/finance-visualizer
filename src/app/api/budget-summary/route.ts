@@ -25,18 +25,19 @@ export async function GET(request: Request) {
     
     // Get all transactions for the specified month
     const transactions = await Transaction.find({
-      date: { $gte: startDate, $lte: endDate }
+      date: { $gte: startDate, $lte: endDate },
+      type: { $ne: 'Income' } // Exclude Income transactions
     });
     
     // Calculate spending by category
     const spendingByCategory: Record<string, number> = {};
-    transactions.forEach(transaction => {
-      const { type, amount } = transaction;
-      if (!spendingByCategory[type]) {
-        spendingByCategory[type] = 0;
-      }
-      spendingByCategory[type] += amount;
-    });
+transactions.forEach(transaction => {
+  const { type, amount } = transaction;
+  if (!spendingByCategory[type]) {
+    spendingByCategory[type] = 0;
+  }
+  spendingByCategory[type] += amount;
+});
     
     // Combine budget and spending data
     const summary = budgets.map(budget => {
@@ -56,7 +57,7 @@ export async function GET(request: Request) {
     
     // Add categories that have spending but no budget
     Object.keys(spendingByCategory).forEach(category => {
-      const hasBudget = summary.some(item => item.category === category);
+      const hasBudget = summary.some((item) => item.category === category);
       if (!hasBudget) {
         summary.push({
           category,

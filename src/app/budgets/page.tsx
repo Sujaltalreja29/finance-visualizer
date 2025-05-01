@@ -12,8 +12,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
-import { AlertTriangle, PiggyBank, Trash2, Plus, DollarSign } from 'lucide-react'
+import { 
+  AlertTriangle, 
+  PiggyBank, 
+  Trash2, 
+  Plus, 
+  DollarSign,
+  Calendar,
+  ArrowUpRight,
+  CircleDollarSign,
+  TrendingUp,
+  Check,
+  AlertCircle,
+  X,
+  BarChart3,
+  LightbulbIcon,
+  Clock,
+  Hammer
+} from 'lucide-react'
 import { PREDEFINED_CATEGORIES } from '@/models/model'
+import { Badge } from '@/components/ui/badge'
 
 interface Budget {
   _id: string
@@ -56,13 +74,24 @@ export default function BudgetsPage() {
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1)
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear())
 
-  // Update this line at the beginning of the component
+  // Summary calculations
+  const totalBudgeted = useMemo(() => 
+    budgetSummary.reduce((total, item) => total + item.budgeted, 0),
+  [budgetSummary])
+  
+  const totalSpent = useMemo(() => 
+    budgetSummary.reduce((total, item) => total + item.spent, 0),
+  [budgetSummary])
+  
+  const totalRemaining = totalBudgeted - totalSpent
+  const overallPercentage = totalBudgeted > 0 ? Math.min(100, Math.round((totalSpent / totalBudgeted) * 100)) : 0
+
   const { 
     register, 
     handleSubmit, 
     setValue, 
     getValues, 
-    reset,  // Add reset back
+    reset,
     formState: { errors, isSubmitting } 
   } = useForm<BudgetFormData>({
     defaultValues: {
@@ -92,12 +121,18 @@ export default function BudgetsPage() {
       // Fetch all budgets
       const budgetsResponse = await axios.get('/api/budgets')
       setBudgets(budgetsResponse.data)
-
+      
       // Fetch budget summary for selected month/year
       const summaryResponse = await axios.get(
         `/api/budget-summary?month=${selectedMonth}&year=${selectedYear}`
       )
-      setBudgetSummary(summaryResponse.data.summary)
+      
+      // Filter out Income from budget summary
+      const filteredSummary = summaryResponse.data.summary.filter(
+        (item: BudgetSummary) => item.category !== 'Income'
+      )
+      
+      setBudgetSummary(filteredSummary)
     } catch (error) {
       console.error('Error fetching budget data:', error)
       toast({
@@ -115,45 +150,44 @@ export default function BudgetsPage() {
   }, [selectedMonth, selectedYear])
 
   // Create a new budget
- // Create a new budget
-const onSubmit = async (data: BudgetFormData) => {
-  try {
-    const budgetData = {
-      category: data.category,
-      amount: parseFloat(data.amount),
-      month: parseInt(data.month),
-      year: parseInt(data.year)
+  const onSubmit = async (data: BudgetFormData) => {
+    try {
+      const budgetData = {
+        category: data.category,
+        amount: parseFloat(data.amount),
+        month: parseInt(data.month),
+        year: parseInt(data.year)
+      }
+      
+      const response = await axios.post('/api/budgets', budgetData)
+      
+      // Update local state
+      setBudgets(prev => [...prev, response.data])
+      
+      // Reset form and refresh data
+      reset({
+        category: "",
+        amount: "",
+        month: selectedMonth.toString(),
+        year: selectedYear.toString()
+      });
+      setShowForm(false);
+      fetchData();
+      
+      toast({
+        title: 'Success',
+        description: 'Budget has been created successfully',
+        variant: 'default'
+      });
+    } catch (error) {
+      console.error('Error creating budget:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create budget',
+        variant: 'destructive'
+      });
     }
-    
-    const response = await axios.post('/api/budgets', budgetData)
-    
-    // Update local state
-    setBudgets(prev => [...prev, response.data])
-    
-    // Reset form and refresh data
-    reset({
-      category: "",
-      amount: "",
-      month: selectedMonth.toString(),
-      year: selectedYear.toString()
-    });
-    setShowForm(false);
-    fetchData();
-    
-    toast({
-      title: 'Success',
-      description: 'Budget has been created successfully',
-      variant: 'default'
-    });
-  } catch (error) {
-    console.error('Error creating budget:', error);
-    toast({
-      title: 'Error',
-      description: 'Failed to create budget',
-      variant: 'destructive'
-    });
-  }
-};
+  };
 
   // Delete a budget
   const handleDelete = async (id: string) => {
@@ -210,48 +244,75 @@ const onSubmit = async (data: BudgetFormData) => {
     return '#10b981' // Under budget - green
   }
 
-  // Chart data for budget vs actual
+  // Get category color from predefined categories
+  const getCategoryColor = (category: string) => {
+    const found = PREDEFINED_CATEGORIES.find(c => c.type === category)
+    return found ? found.color : '#CCCCCC'
+  }
+
+  // Chart data for budget vs actual - with Income filter
   const chartData = useMemo(() => {
-    return budgetSummary.map(summary => ({
-      category: summary.category,
-      Budget: summary.budgeted,
-      Spent: summary.spent
-    }))
+    return budgetSummary
+      .filter(summary => summary.category !== 'Income')
+      .map(summary => ({
+        category: summary.category,
+        Budget: summary.budgeted,
+        Spent: summary.spent
+      }))
   }, [budgetSummary])
 
   if (loading && budgets.length === 0) {
     return (
-      <div className="container mx-auto p-4 md:p-8">
+      <div className="container mx-auto p-4 md:p-8 max-w-7xl">
         <div className="mb-8">
           <Skeleton className="h-10 w-1/3 mb-4" />
           <Skeleton className="h-4 w-2/3" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <Skeleton className="h-[400px] w-full" />
-          <Skeleton className="h-[400px] w-full" />
+        
+        <Skeleton className="h-12 w-full mb-8 rounded-lg" />
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Skeleton className="h-[120px] rounded-xl" />
+          <Skeleton className="h-[120px] rounded-xl" />
+          <Skeleton className="h-[120px] rounded-xl" />
+        </div>
+        
+        <Skeleton className="h-[400px] w-full mb-8 rounded-xl" />
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Skeleton className="h-[200px] rounded-xl" />
+          <Skeleton className="h-[200px] rounded-xl" />
+          <Skeleton className="h-[200px] rounded-xl" />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-8">
+    <div className="container mx-auto p-4 md:p-8 max-w-7xl">
+      {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Budget Management</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-800 flex items-center">
+            <PiggyBank className="h-8 w-8 mr-3 text-green-600" />
+            Budget Management
+          </h1>
+          <p className="text-gray-500 mt-1 ml-11">
             Set monthly budgets for each category and track your spending
           </p>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center space-x-2 bg-white rounded-lg shadow-sm border border-gray-200 p-1">
             <Select
-              defaultValue={selectedMonth.toString()}
+              value={selectedMonth.toString()}
               onValueChange={(value) => setSelectedMonth(parseInt(value))}
             >
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Month" />
+              <SelectTrigger className="w-[130px] border-0 shadow-none focus:ring-0 h-9">
+                <div className="flex items-center">
+                  <Calendar className="w-4 h-4 mr-2 text-gray-500" />
+                  <SelectValue placeholder="Month" />
+                </div>
               </SelectTrigger>
               <SelectContent>
                 {MONTHS.map((month, index) => (
@@ -262,11 +323,13 @@ const onSubmit = async (data: BudgetFormData) => {
               </SelectContent>
             </Select>
 
+            <div className="h-8 border-r border-gray-200"></div>
+
             <Select
-              defaultValue={selectedYear.toString()}
+              value={selectedYear.toString()}
               onValueChange={(value) => setSelectedYear(parseInt(value))}
             >
-              <SelectTrigger className="w-[100px]">
+              <SelectTrigger className="w-[90px] border-0 shadow-none focus:ring-0 h-9">
                 <SelectValue placeholder="Year" />
               </SelectTrigger>
               <SelectContent>
@@ -278,38 +341,122 @@ const onSubmit = async (data: BudgetFormData) => {
               </SelectContent>
             </Select>
           </div>
-<Button
-  onClick={() => {
-    setShowForm(true);
-    // Reset the form to default values
-    reset({
-      category: "",
-      amount: "",
-      month: selectedMonth.toString(),
-      year: selectedYear.toString()
-    });
-  }}
-  className="bg-green-600 hover:bg-green-700"
-  disabled={showForm || availableCategories.length === 0}
->
-  <Plus className="mr-2 h-4 w-4" />
-  Add Budget
-</Button>
+
+          <Button
+            onClick={() => {
+              setShowForm(true);
+              reset({
+                category: "",
+                amount: "",
+                month: selectedMonth.toString(),
+                year: selectedYear.toString()
+              });
+            }}
+            className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600 text-white shadow-sm"
+            disabled={showForm || availableCategories.length === 0}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Budget
+          </Button>
         </div>
       </div>
 
+      {/* Summary Cards */}
+      {budgetSummary.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-none shadow-md overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-blue-800 flex items-center">
+                <CircleDollarSign className="mr-2 h-4 w-4" />
+                Total Budgeted
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-gray-800">
+                ₹{totalBudgeted.toLocaleString('en-IN', {maximumFractionDigits: 2})}
+              </div>
+              <p className="text-xs text-blue-700 mt-1">
+                For {filteredBudgets.length} categories
+              </p>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-none shadow-md overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-purple-800 flex items-center">
+                <TrendingUp className="mr-2 h-4 w-4" />
+                Total Spent
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-gray-800">
+                ₹{totalSpent.toLocaleString('en-IN', {maximumFractionDigits: 2})}
+              </div>
+              <div className="mt-1">
+                <div className="w-full bg-purple-200 rounded-full h-1.5">
+                  <div 
+                    className={`h-1.5 rounded-full ${
+                      overallPercentage > 90 ? 'bg-red-500' : 
+                      overallPercentage > 75 ? 'bg-amber-500' : 'bg-green-500'
+                    }`}
+                    style={{ width: `${overallPercentage}%` }}
+                  ></div>
+                </div>
+                <p className="text-xs text-purple-700 mt-1">{overallPercentage}% of budget used</p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className={`border-none shadow-md overflow-hidden ${
+            totalRemaining >= 0 
+              ? "bg-gradient-to-br from-green-50 to-green-100" 
+              : "bg-gradient-to-br from-red-50 to-red-100"
+          }`}>
+            <CardHeader className="pb-2">
+              <CardTitle className={`text-sm font-medium flex items-center ${
+                totalRemaining >= 0 ? "text-green-800" : "text-red-800"
+              }`}>
+                <ArrowUpRight className="mr-2 h-4 w-4" />
+                Remaining
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-gray-800">
+                ₹{Math.abs(totalRemaining).toLocaleString('en-IN', {maximumFractionDigits: 2})}
+              </div>
+              <div className="flex items-center mt-1">
+                <Badge className={`${
+                  totalRemaining >= 0 
+                    ? "bg-green-100 text-green-800 hover:bg-green-200" 
+                    : "bg-red-100 text-red-800 hover:bg-red-200"
+                } border-0`}>
+                  {totalRemaining >= 0 ? "Under budget" : "Over budget"}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Tabs Navigation */}
       <Tabs defaultValue="overview" className="mb-8">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="manage">Manage Budgets</TabsTrigger>
+        <TabsList className="grid grid-cols-2 w-full max-w-md mx-auto mb-6">
+        <TabsTrigger value="overview" className="data-[state=active]:bg-green-50 data-[state=active]:text-green-700">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="manage" className="data-[state=active]:bg-green-50 data-[state=active]:text-green-700">
+            <Hammer className="w-4 h-4 mr-2" />
+            Manage Budgets
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
           {budgetSummary.length === 0 ? (
-            <Card>
+            <Card className="border border-dashed border-gray-300 bg-gray-50">
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <PiggyBank className="mr-2 h-5 w-5" />
+                  <PiggyBank className="mr-2 h-5 w-5 text-green-600" />
                   No Budget Data
                 </CardTitle>
                 <CardDescription>
@@ -317,34 +464,49 @@ const onSubmit = async (data: BudgetFormData) => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex justify-center py-8">
-                <Button
-  onClick={() => {
-    setShowForm(true);
-    // Reset the form to default values
-    reset({
-      category: "",
-      amount: "",
-      month: selectedMonth.toString(),
-      year: selectedYear.toString()
-    });
-  }}
-  className="bg-green-600 hover:bg-green-700"
->
-  <Plus className="mr-2 h-4 w-4" />
-  Create Your First Budget
-</Button>
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="bg-green-100 rounded-full p-6 mb-4">
+                    <PiggyBank className="h-12 w-12 text-green-600" />
+                  </div>
+                  <p className="text-gray-600 max-w-md text-center mb-6">
+                    Setting up a budget helps you plan your spending and track how well you're staying within your financial limits.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      setShowForm(true);
+                      reset({
+                        category: "",
+                        amount: "",
+                        month: selectedMonth.toString(),
+                        year: selectedYear.toString()
+                      });
+                    }}
+                    className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Your First Budget
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           ) : (
             <>
-              <Card>
+              <Card className="shadow-md border border-gray-100">
                 <CardHeader>
-                  <CardTitle>Budget vs. Actual Spending</CardTitle>
-                  <CardDescription>
-                    Compare your budgeted amounts with actual spending for {MONTHS[selectedMonth - 1]} {selectedYear}
-                  </CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center">
+                        <BarChart3 className="mr-2 h-5 w-5 text-blue-600" />
+                        Budget vs. Actual Spending
+                      </CardTitle>
+                      <CardDescription>
+                        Compare your budgeted amounts with actual spending for {MONTHS[selectedMonth - 1]} {selectedYear}
+                      </CardDescription>
+                    </div>
+                    <Badge className="bg-blue-100 text-blue-800 border-0">
+                      {budgetSummary.length} Categories
+                    </Badge>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[400px] w-full">
@@ -353,21 +515,44 @@ const onSubmit = async (data: BudgetFormData) => {
                         data={chartData}
                         margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                         <XAxis
                           dataKey="category"
                           angle={-45}
                           textAnchor="end"
                           height={70}
+                          tick={{ fontSize: 12 }}
                         />
-                        <YAxis />
+                        <YAxis
+                          tick={{ fontSize: 12 }}
+                          tickFormatter={(value) => `₹${value}`}
+                        />
                         <Tooltip
-                          formatter={(value) => [`₹${value}`, undefined]}
+                          contentStyle={{ 
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                            borderRadius: '8px',
+                            border: '1px solid #eaeaea',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                          }}
+                          formatter={(value) => [`₹${value.toLocaleString('en-IN')}`, undefined]}
                           labelFormatter={(label) => `Category: ${label}`}
                         />
-                        <Legend />
-                        <Bar dataKey="Budget" fill="#3b82f6" />
-                        <Bar dataKey="Spent" fill="#10b981">
+                        <Legend 
+                          verticalAlign="top" 
+                          height={40}
+                          wrapperStyle={{ paddingTop: '10px' }}
+                        />
+                        <Bar 
+                          dataKey="Budget" 
+                          fill="#3b82f6" 
+                          radius={[4, 4, 0, 0]}
+                          name="Budget Amount"
+                        />
+                        <Bar 
+                          dataKey="Spent" 
+                          name="Actual Spent"
+                          radius={[4, 4, 0, 0]}
+                        >
                           {
                             chartData.map((entry, index) => (
                               <Cell
@@ -383,54 +568,81 @@ const onSubmit = async (data: BudgetFormData) => {
                 </CardContent>
               </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {budgetSummary.map((item, index) => (
-                  <Card key={index} className="overflow-hidden">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-lg">{item.category}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm text-muted-foreground">Budget:</span>
-                        <span className="font-medium">₹{item.budgeted.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm text-muted-foreground">Spent:</span>
-                        <span className="font-medium">₹{item.spent.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-center mb-4">
-                        <span className="text-sm text-muted-foreground">Remaining:</span>
-                        <span
-                          className={`font-medium ${item.remaining < 0 ? 'text-red-500' : 'text-green-500'
-                            }`}
-                        >
-                          ₹{item.remaining.toFixed(2)}
-                        </span>
-                      </div>
-
-                      <div className="relative pt-1">
-                        <div className="overflow-hidden h-2 text-xs flex rounded bg-gray-200">
-                          <div
-                            style={{ width: `${Math.min(100, item.percentage)}%` }}
-                            className={`shadow-none flex flex-col justify-center text-center whitespace-nowrap text-white ${item.percentage > 100
-                                ? 'bg-red-500'
-                                : item.percentage > 80
-                                  ? 'bg-yellow-500'
-                                  : 'bg-green-500'
-                              }`}
-                          ></div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {budgetSummary.map((item, index) => {
+                  const categoryColor = getCategoryColor(item.category);
+                  const progressColor = item.percentage > 100 
+                    ? 'bg-red-500' 
+                    : item.percentage > 80 
+                      ? 'bg-yellow-500' 
+                      : 'bg-green-500';
+                  
+                  return (
+                    <Card key={index} className="overflow-hidden transition-all duration-200 hover:shadow-md">
+                      <CardHeader className="pb-3 border-b border-gray-100">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg flex items-center">
+                            <div 
+                              className="w-3 h-3 rounded-full mr-2"
+                              style={{ backgroundColor: categoryColor }}
+                            ></div>
+                            {item.category}
+                          </CardTitle>
+                          <Badge 
+                            className={`${
+                              item.percentage > 100 
+                                ? 'bg-red-100 text-red-700' 
+                                : item.percentage > 80 
+                                  ? 'bg-amber-100 text-amber-700' 
+                                  : 'bg-green-100 text-green-700'
+                            } border-0`}
+                          >
+                            {item.percentage > 100 
+                              ? 'Over Budget' 
+                              : item.percentage > 80 
+                                ? 'Near Limit' 
+                                : 'Under Budget'}
+                          </Badge>
                         </div>
-                        <div className="flex justify-between text-xs mt-1">
-                          <span>0%</span>
-                          <span className={item.percentage > 100 ? 'text-red-500 font-medium' : ''}>
-                            {item.percentage.toFixed(0)}%
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-sm text-gray-500">Budget:</span>
+                          <span className="font-medium">₹{item.budgeted.toLocaleString('en-IN', {maximumFractionDigits: 2})}</span>
+                        </div>
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-sm text-gray-500">Spent:</span>
+                          <span className="font-medium">₹{item.spent.toLocaleString('en-IN', {maximumFractionDigits: 2})}</span>
+                        </div>
+                        <div className="flex justify-between items-center mb-4">
+                          <span className="text-sm text-gray-500">Remaining:</span>
+                          <span
+                            className={`font-medium ${item.remaining < 0 ? 'text-red-500' : 'text-green-500'}`}
+                          >
+                            ₹{Math.abs(item.remaining).toLocaleString('en-IN', {maximumFractionDigits: 2})}
+                            {item.remaining < 0 ? ' over' : ' left'}
                           </span>
-                          <span>100%</span>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+
+                        <div className="relative pt-1">
+                          <div className="overflow-hidden h-2.5 text-xs flex rounded-full bg-gray-200">
+                            <div
+                              style={{ width: `${Math.min(100, item.percentage)}%` }}
+                              className={`shadow-none flex flex-col justify-center text-center whitespace-nowrap text-white transition-all duration-500 ${progressColor}`}
+                            ></div>
+                          </div>
+                          <div className="flex justify-between text-xs mt-1.5">
+                            <span className="text-gray-500">0%</span>
+                            <span className={`font-medium ${item.percentage > 100 ? 'text-red-500' : 'text-gray-700'}`}>
+                              {item.percentage.toFixed(0)}%
+                            </span>
+                            <span className="text-gray-500">100%</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </>
           )}
@@ -438,21 +650,27 @@ const onSubmit = async (data: BudgetFormData) => {
 
         <TabsContent value="manage">
           {showForm && (
-            <Card className="mb-6 border-green-200 bg-green-50">
+            <Card className="mb-6 border-green-200 bg-gradient-to-br from-green-50 to-green-100/60 shadow-md">
               <CardHeader>
-                <CardTitle className="text-lg">Create New Budget</CardTitle>
+                <CardTitle className="text-lg flex items-center">
+                  <Plus className="mr-2 h-4 w-4 text-green-600" />
+                  Create New Budget
+                </CardTitle>
                 <CardDescription>
                   Set a monthly budget for a specific category
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {/* Category Selection */}
                     <div className="space-y-2">
-                      <Label htmlFor="category">Category</Label>
+                      <Label htmlFor="category" className="flex items-center text-gray-700">
+                        <BarChart3 className="mr-2 h-4 w-4 text-gray-500" />
+                        Category
+                      </Label>
                       <select
-                        className="w-full px-3 py-2 bg-white border rounded-md"
+                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
                         id="category"
                         {...register('category', { required: 'Category is required' })}
                       >
@@ -464,20 +682,26 @@ const onSubmit = async (data: BudgetFormData) => {
                         ))}
                       </select>
                       {errors.category && (
-                        <p className="text-sm text-red-500">{errors.category.message}</p>
+                        <p className="text-sm text-red-500 flex items-center">
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                          {errors.category.message}
+                        </p>
                       )}
                     </div>
 
                     {/* Amount Input */}
                     <div className="space-y-2">
-                      <Label htmlFor="amount">Budget Amount</Label>
+                      <Label htmlFor="amount" className="flex items-center text-gray-700">
+                        <CircleDollarSign className="mr-2 h-4 w-4 text-gray-500" />
+                        Budget Amount
+                      </Label>
                       <div className="relative">
                         <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 h-4 w-4" />
                         <Input
                           id="amount"
                           type="number"
                           step="0.01"
-                          className="pl-10"
+                          className="pl-10 border-gray-300 focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
                           {...register('amount', {
                             required: 'Amount is required',
                             min: {
@@ -489,15 +713,21 @@ const onSubmit = async (data: BudgetFormData) => {
                         />
                       </div>
                       {errors.amount && (
-                        <p className="text-sm text-red-500">{errors.amount.message}</p>
+                        <p className="text-sm text-red-500 flex items-center">
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                          {errors.amount.message}
+                        </p>
                       )}
                     </div>
 
                     {/* Month Selection */}
                     <div className="space-y-2">
-                      <Label htmlFor="month">Month</Label>
+                      <Label htmlFor="month" className="flex items-center text-gray-700">
+                        <Calendar className="mr-2 h-4 w-4 text-gray-500" />
+                        Month
+                      </Label>
                       <select
-                        className="w-full px-3 py-2 bg-white border rounded-md"
+                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
                         id="month"
                         {...register('month', { required: 'Month is required' })}
                       >
@@ -508,15 +738,21 @@ const onSubmit = async (data: BudgetFormData) => {
                         ))}
                       </select>
                       {errors.month && (
-                        <p className="text-sm text-red-500">{errors.month.message}</p>
+                        <p className="text-sm text-red-500 flex items-center">
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                          {errors.month.message}
+                        </p>
                       )}
                     </div>
 
                     {/* Year Selection */}
                     <div className="space-y-2">
-                      <Label htmlFor="year">Year</Label>
+                      <Label htmlFor="year" className="flex items-center text-gray-700">
+                        <Clock className="mr-2 h-4 w-4 text-gray-500" />
+                        Year
+                      </Label>
                       <select
-                        className="w-full px-3 py-2 bg-white border rounded-md"
+                        className="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-md shadow-sm focus:border-green-300 focus:ring focus:ring-green-200 focus:ring-opacity-50"
                         id="year"
                         {...register('year', { required: 'Year is required' })}
                       >
@@ -527,25 +763,43 @@ const onSubmit = async (data: BudgetFormData) => {
                         ))}
                       </select>
                       {errors.year && (
-                        <p className="text-sm text-red-500">{errors.year.message}</p>
+                        <p className="text-sm text-red-500 flex items-center">
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                          {errors.year.message}
+                        </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-3">
+                  <div className="flex justify-end gap-3 pt-2">
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setShowForm(false)}
+                      className="border-gray-300"
                     >
+                      <X className="mr-2 h-4 w-4" />
                       Cancel
                     </Button>
                     <Button
                       type="submit"
-                      className="bg-green-600 hover:bg-green-700"
+                      className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
                       disabled={isSubmitting}
                     >
-                      {isSubmitting ? 'Saving...' : 'Save Budget'}
+                      {isSubmitting ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="mr-2 h-4 w-4" />
+                          Save Budget
+                        </>
+                      )}
                     </Button>
                   </div>
                 </form>
@@ -554,7 +808,7 @@ const onSubmit = async (data: BudgetFormData) => {
           )}
 
           {filteredBudgets.length === 0 && !showForm ? (
-            <Card>
+            <Card className="border border-dashed border-gray-300 bg-gray-50">
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <AlertTriangle className="mr-2 h-5 w-5 text-amber-500" />
@@ -564,175 +818,302 @@ const onSubmit = async (data: BudgetFormData) => {
                   You haven't set up any budgets for {MONTHS[selectedMonth - 1]} {selectedYear}.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex justify-center py-8">
-              <Button
-  onClick={() => {
-    setShowForm(true);
-    // Reset the form to default values
-    reset({
-      category: "",
-      amount: "",
-      month: selectedMonth.toString(),
-      year: selectedYear.toString()
-    });
-  }}
-  className="bg-green-600 hover:bg-green-700"
->
-  <Plus className="mr-2 h-4 w-4" />
-  Create Budget
-</Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredBudgets.map(budget => (
-                <Card key={budget._id}>
-                  <CardHeader>
-                    <CardTitle className="text-lg">{budget.category}</CardTitle>
-                    <CardDescription>
-                      {MONTHS[budget.month - 1]} {budget.year}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold text-green-600">
-                      ₹{budget.amount.toFixed(2)}
-                    </div>
-
-                    {budgetSummary.find(s => s.category === budget.category) && (
-                      <div className="mt-4">
-                        <div className="text-sm text-muted-foreground mb-1">
-                          Spent: ₹{budgetSummary.find(s => s.category === budget.category)?.spent.toFixed(2) || '0.00'}
-                        </div>
-                        <div className="relative pt-1">
-                          <div className="overflow-hidden h-2 text-xs flex rounded bg-gray-200">
-                            <div
-                              style={{
-                                width: `${Math.min(100, budgetSummary.find(s => s.category === budget.category)?.percentage || 0)}%`
-                              }}
-                              className={`shadow-none flex flex-col justify-center text-center whitespace-nowrap text-white ${(budgetSummary.find(s => s.category === budget.category)?.percentage || 0) > 100
-                                  ? 'bg-red-500'
-                                  : (budgetSummary.find(s => s.category === budget.category)?.percentage || 0) > 80
-                                    ? 'bg-yellow-500'
-                                    : 'bg-green-500'
-                                }`}
+              <CardContent className="flex flex-col items-center justify-center py-8">
+                <div className="bg-amber-100 rounded-full p-6 mb-4">
+                  <AlertTriangle className="h-12 w-12 text-amber-500" />
+                </div>
+                <p className="text-gray-600 max-w-md text-center mb-6">
+                  Creating a budget is the first step to gain control over your finances. Start by setting up budgets for your major spending categories.
+                </p>
+                <Button
+                  onClick={() => {
+                    setShowForm(true);
+                    reset({
+                      category: "",
+                      amount: "",
+                      month: selectedMonth.toString(),
+                      year: selectedYear.toString()
+                    });
+                  }}
+                  className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Budget
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredBudgets.map(budget => {
+                  const budgetSummaryItem = budgetSummary.find(s => s.category === budget.category);
+                  const categoryColor = getCategoryColor(budget.category);
+                  
+                  return (
+                    <Card key={budget._id} className="border border-gray-200 hover:shadow-md transition-shadow duration-200">
+                      <CardHeader className="pb-2 border-b border-gray-100">
+                        <div className="flex justify-between items-center">
+                          <CardTitle className="text-lg flex items-center">
+                            <div 
+                              className="w-3 h-3 rounded-full mr-2"
+                              style={{ backgroundColor: categoryColor }}
                             ></div>
-                          </div>
+                            {budget.category}
+                          </CardTitle>
+                          <Badge variant="outline" className="text-gray-600 bg-gray-50">
+                            {MONTHS[budget.month - 1].substring(0, 3)} {budget.year}
+                          </Badge>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
-                  <CardFooter className="border-t pt-4 flex justify-between">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                      onClick={() => handleDelete(budget._id)}
-                      disabled={deletingId === budget._id}
-                    >
-                      {deletingId === budget._id ? (
-                        <span>Deleting...</span>
-                      ) : (
-                        <>
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </>
-                      )}
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
-
-      {/* Insights Section */}
-      {budgetSummary.length > 0 && (
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>Spending Insights</CardTitle>
-            <CardDescription>
-              Analysis of your spending patterns for {MONTHS[selectedMonth - 1]} {selectedYear}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Top spending categories */}
-            <div>
-              <h3 className="font-medium mb-2">Top Spending Categories</h3>
-              <div className="space-y-2">
-                {[...budgetSummary]
-                  .sort((a, b) => b.spent - a.spent)
-                  .slice(0, 3)
-                  .map((category, index) => (
-                    <div key={index} className="flex justify-between items-center">
-                      <div className="flex items-center">
-                        <span className={`inline-block w-4 h-4 rounded-full mr-2 ${index === 0 ? 'bg-red-500' : index === 1 ? 'bg-orange-500' : 'bg-yellow-500'
-                          }`}></span>
-                        <span>{category.category}</span>
-                      </div>
-                      <span className="font-medium">₹{category.spent.toFixed(2)}</span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            {/* Budget status */}
-            <div>
-              <h3 className="font-medium mb-2">Budget Status</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="text-green-600 font-medium">Under Budget</div>
-                  <div className="text-2xl font-bold">
-                    {budgetSummary.filter(s => s.percentage < 80).length}
-                  </div>
-                  <div className="text-sm text-gray-500">categories</div>
-                </div>
-
-                <div className="bg-yellow-50 p-4 rounded-lg">
-                  <div className="text-yellow-600 font-medium">Near Limit</div>
-                  <div className="text-2xl font-bold">
-                    {budgetSummary.filter(s => s.percentage >= 80 && s.percentage <= 100).length}
-                  </div>
-                  <div className="text-sm text-gray-500">categories</div>
-                </div>
-
-                <div className="bg-red-50 p-4 rounded-lg">
-                  <div className="text-red-600 font-medium">Over Budget</div>
-                  <div className="text-2xl font-bold">
-                    {budgetSummary.filter(s => s.percentage > 100).length}
-                  </div>
-                  <div className="text-sm text-gray-500">categories</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Recommendations */}
-            {budgetSummary.some(s => s.percentage > 100) && (
-              <div className="bg-blue-50 p-4 rounded-lg mt-4">
-                <h3 className="font-medium text-blue-700 mb-2">Recommendations</h3>
-                <ul className="list-disc list-inside text-sm space-y-1 text-gray-700">
-                  {budgetSummary
-                    .filter(s => s.percentage > 100)
-                    .map((category, index) => (
-                      <li key={index}>
-                        Consider adjusting your budget for <strong>{category.category}</strong> as you're
-                        spending {Math.round(category.percentage - 100)}% more than budgeted.
-                      </li>
-                    ))}
-                  {budgetSummary
-                    .filter(s => s.percentage < 50 && s.budgeted > 0)
-                    .map((category, index) => (
-                      <li key={index}>
-                        You're only using {Math.round(category.percentage)}% of your <strong>{category.category}</strong> budget.
-                        You might reallocate some to categories where you're over budget.
-                      </li>
-                    ))}
-                </ul>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <span className="text-gray-500 text-sm">Budget Amount</span>
+                          <span className="text-2xl font-bold text-green-600">
+                            ₹{budget.amount.toLocaleString('en-IN', {maximumFractionDigits: 2})}
+                          </span>
+                        </div>
+  
+                        {budgetSummaryItem && (
+                          <div className="mt-2 space-y-3">
+                            <div className="flex justify-between items-center text-sm">
+                              <span className="text-gray-500">Spent so far:</span>
+                              <span className="font-medium">
+                                ₹{budgetSummaryItem.spent.toLocaleString('en-IN', {maximumFractionDigits: 2})}
+                              </span>
+                            </div>
+                            
+                            <div className="relative">
+                              <div className="overflow-hidden h-2 text-xs flex rounded-full bg-gray-200">
+                                <div
+                                  style={{
+                                    width: `${Math.min(100, budgetSummaryItem.percentage)}%`
+                                  }}
+                                  className={`shadow-none flex flex-col justify-center text-center whitespace-nowrap text-white transition-all duration-500 ${
+                                    budgetSummaryItem.percentage > 100
+                                      ? 'bg-red-500'
+                                      : budgetSummaryItem.percentage > 80
+                                        ? 'bg-yellow-500'
+                                        : 'bg-green-500'
+                                  }`}
+                                ></div>
+                              </div>
+                              <div className="flex justify-end text-xs mt-1">
+                                <span className={`${
+                                  budgetSummaryItem.percentage > 100 ? 'text-red-600 font-medium' : 'text-gray-600'
+                                }`}>
+                                  {budgetSummaryItem.percentage.toFixed(0)}% used
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div className="flex justify-between items-center text-sm pt-1">
+                              <span className="text-gray-500">Status:</span>
+                              <Badge 
+                                className={`${
+                                  budgetSummaryItem.percentage > 100 
+                                    ? 'bg-red-100 text-red-700' 
+                                    : budgetSummaryItem.percentage > 80 
+                                      ? 'bg-amber-100 text-amber-700' 
+                                      : 'bg-green-100 text-green-700'
+                                } border-0`}
+                              >
+                                {budgetSummaryItem.percentage > 100 
+                                  ? 'Over Budget' 
+                                  : budgetSummaryItem.percentage > 80 
+                                    ? 'Near Limit' 
+                                    : 'Under Budget'}
+                              </Badge>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                      <CardFooter className="border-t pt-3 flex justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDelete(budget._id)}
+                          disabled={deletingId === budget._id}
+                        >
+                          {deletingId === budget._id ? (
+                            <>
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Deleting...
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </>
+                          )}
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
               </div>
             )}
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
-}
+          </TabsContent>
+        </Tabs>
+  
+        {/* Insights Section */}
+        {budgetSummary.length > 0 && (
+          <Card className="mt-8 shadow-md border border-gray-100">
+            <CardHeader className="border-b border-gray-100 pb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center">
+                    <LightbulbIcon className="mr-2 h-5 w-5 text-amber-500" />
+                    Spending Insights
+                  </CardTitle>
+                  <CardDescription>
+                    Analysis of your spending patterns for {MONTHS[selectedMonth - 1]} {selectedYear}
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-blue-700 bg-blue-50 border-blue-100">
+                  Financial Intelligence
+                </Badge>
+              </div>
+            </CardHeader>
+            
+            <CardContent className="pt-6 space-y-6">
+              {/* Top spending categories */}
+              <div className="bg-gray-50 rounded-xl p-5">
+                <h3 className="font-medium mb-4 text-gray-800 flex items-center">
+                  <TrendingUp className="h-4 w-4 mr-2 text-blue-600" />
+                  Top Spending Categories
+                </h3>
+                <div className="space-y-3">
+                  {[...budgetSummary]
+                    .sort((a, b) => b.spent - a.spent)
+                    .slice(0, 3)
+                    .map((category, index) => (
+                      <div key={index} className="flex justify-between items-center bg-white p-3 rounded-lg shadow-sm">
+                        <div className="flex items-center">
+                          <div 
+                            className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                              index === 0 ? 'bg-red-100' : index === 1 ? 'bg-orange-100' : 'bg-yellow-100'
+                            }`}
+                          >
+                            <div 
+                              className={`w-3 h-3 rounded-full ${
+                                index === 0 ? 'bg-red-500' : index === 1 ? 'bg-orange-500' : 'bg-yellow-500'
+                              }`}
+                            ></div>
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-800">{category.category}</span>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {Math.round(category.spent / totalSpent * 100)}% of total spending
+                            </div>
+                          </div>
+                        </div>
+                        <span className="font-medium text-gray-900">
+                          ₹{category.spent.toLocaleString('en-IN', {maximumFractionDigits: 2})}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+  
+              {/* Budget status cards */}
+              <div>
+                <h3 className="font-medium mb-4 text-gray-800 flex items-center">
+                  <Check className="h-4 w-4 mr-2 text-green-600" />
+                  Budget Status
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Card className="border-none bg-gradient-to-br from-green-50 to-green-100 shadow-sm">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-green-600 font-medium">Under Budget</div>
+                        <div className="bg-green-200 rounded-full p-1.5">
+                          <Check className="h-4 w-4 text-green-700" />
+                        </div>
+                      </div>
+                      <div className="text-3xl font-bold text-gray-800">
+                        {budgetSummary.filter(s => s.category !== 'Income' && s.percentage < 80).length}
+                      </div>
+                      <div className="text-sm text-green-700 mt-1">categories</div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card className="border-none bg-gradient-to-br from-yellow-50 to-yellow-100 shadow-sm">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-yellow-600 font-medium">Near Limit</div>
+                        <div className="bg-yellow-200 rounded-full p-1.5">
+                          <AlertTriangle className="h-4 w-4 text-yellow-700" />
+                        </div>
+                      </div>
+                      <div className="text-3xl font-bold text-gray-800">
+                        {budgetSummary.filter(s => s.category !== 'Income' && s.percentage >= 80 && s.percentage <= 100).length}
+                      </div>
+                      <div className="text-sm text-yellow-700 mt-1">categories</div>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card className="border-none bg-gradient-to-br from-red-50 to-red-100 shadow-sm">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-red-600 font-medium">Over Budget</div>
+                        <div className="bg-red-200 rounded-full p-1.5">
+                          <X className="h-4 w-4 text-red-700" />
+                        </div>
+                      </div>
+                      <div className="text-3xl font-bold text-gray-800">
+                        {budgetSummary.filter(s => s.category !== 'Income' && s.percentage > 100).length}
+                      </div>
+                      <div className="text-sm text-red-700 mt-1">categories</div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+  
+              {/* Recommendations */}
+              {budgetSummary
+                .filter(s => s.category !== 'Income' && s.percentage > 100)
+                .length > 0 && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-5 rounded-xl border border-blue-100 shadow-sm mt-4">
+                  <h3 className="font-medium text-blue-700 mb-3 flex items-center">
+                    <LightbulbIcon className="h-4 w-4 mr-2" />
+                    Smart Recommendations
+                  </h3>
+                  <ul className="space-y-2">
+                    {budgetSummary
+                      .filter(s => s.category !== 'Income' && s.percentage > 100)
+                      .map((category, index) => (
+                        <li key={index} className="flex items-start bg-white/80 p-3 rounded-lg backdrop-blur-sm">
+                          <div className="bg-red-100 rounded-full p-1 mr-3 mt-0.5">
+                            <AlertCircle className="h-3.5 w-3.5 text-red-600" />
+                          </div>
+                          <div className="text-sm text-gray-700">
+                            Consider adjusting your budget for <strong>{category.category}</strong> as you're 
+                            spending <span className="text-red-600 font-medium">{Math.round(category.percentage - 100)}% more</span> than budgeted.
+                          </div>
+                        </li>
+                      ))}
+                    {budgetSummary
+                      .filter(s => s.category !== 'Income' && s.percentage < 50 && s.budgeted > 0)
+                      .map((category, index) => (
+                        <li key={`underuse-${index}`} className="flex items-start bg-white/80 p-3 rounded-lg backdrop-blur-sm">
+                          <div className="bg-green-100 rounded-full p-1 mr-3 mt-0.5">
+                            <TrendingUp className="h-3.5 w-3.5 text-green-600" />
+                          </div>
+                          <div className="text-sm text-gray-700">
+                            You're only using <span className="text-green-600 font-medium">{Math.round(category.percentage)}%</span> of your <strong>{category.category}</strong> budget. 
+                            You might reallocate some to categories where you're over budget.
+                          </div>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    )
+  }
