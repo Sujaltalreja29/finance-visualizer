@@ -1,0 +1,36 @@
+{
+    "name": "AI Powered Expense Tracker",
+    "short_name": "Expense Tracker",
+    "description": "Your app description here",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#000000",
+    "icons": [
+      {
+        "src": "./image/icon-128x128.png",
+        "sizes": "128x128",
+        "type": "image/png"
+      },
+      {
+        "src": "./image/icon-512x512.png",
+        "sizes": "512x512",
+        "type": "image/png"
+      }
+    ],
+        "screenshots": [
+          {
+            "src": "./image/desktop.png",
+            "type": "image/png",
+            "sizes": "1280x800",
+            "form_factor": "wide"
+          },
+          {
+            "src": "./image/mobile.png",
+            "type": "image/png",
+            "sizes": "750x1334",
+            "form_factor": "narrow"
+          }
+        ]
+  }
+  
