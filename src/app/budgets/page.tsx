@@ -50,25 +50,35 @@ export default function BudgetsPage() {
   const [budgetSummary, setBudgetSummary] = useState<BudgetSummary[]>([])
   const [showForm, setShowForm] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  
+
   // Get current month and year for default filter values
   const currentDate = new Date()
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1)
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear())
-  
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<BudgetFormData>({
+
+  // Update this line at the beginning of the component
+  const { 
+    register, 
+    handleSubmit, 
+    setValue, 
+    getValues, 
+    reset,  // Add reset back
+    formState: { errors, isSubmitting } 
+  } = useForm<BudgetFormData>({
     defaultValues: {
       month: selectedMonth.toString(),
-      year: selectedYear.toString()
+      year: selectedYear.toString(),
+      category: "",
+      amount: ""
     }
-  })
+  });
 
   // Categories that don't have a budget for the selected month/year
   const availableCategories = useMemo(() => {
     const budgetedCategories = budgets
       .filter(b => b.month === selectedMonth && b.year === selectedYear)
       .map(b => b.category)
-    
+
     return PREDEFINED_CATEGORIES
       .filter(c => c.type !== 'Income') // Don't budget for income
       .filter(c => !budgetedCategories.includes(c.type))
@@ -82,7 +92,7 @@ export default function BudgetsPage() {
       // Fetch all budgets
       const budgetsResponse = await axios.get('/api/budgets')
       setBudgets(budgetsResponse.data)
-      
+
       // Fetch budget summary for selected month/year
       const summaryResponse = await axios.get(
         `/api/budget-summary?month=${selectedMonth}&year=${selectedYear}`
@@ -105,55 +115,61 @@ export default function BudgetsPage() {
   }, [selectedMonth, selectedYear])
 
   // Create a new budget
-  const onSubmit = async (data: BudgetFormData) => {
-    try {
-      const budgetData = {
-        category: data.category,
-        amount: parseFloat(data.amount),
-        month: parseInt(data.month),
-        year: parseInt(data.year)
-      }
-      
-      const response = await axios.post('/api/budgets', budgetData)
-      
-      // Update local state
-      setBudgets(prev => [...prev, response.data])
-      
-      // Reset form and refresh data
-      reset()
-      setShowForm(false)
-      fetchData()
-      
-      toast({
-        title: 'Success',
-        description: 'Budget has been created successfully',
-        variant: 'default'
-      })
-    } catch (error) {
-      console.error('Error creating budget:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to create budget',
-        variant: 'destructive'
-      })
+ // Create a new budget
+const onSubmit = async (data: BudgetFormData) => {
+  try {
+    const budgetData = {
+      category: data.category,
+      amount: parseFloat(data.amount),
+      month: parseInt(data.month),
+      year: parseInt(data.year)
     }
+    
+    const response = await axios.post('/api/budgets', budgetData)
+    
+    // Update local state
+    setBudgets(prev => [...prev, response.data])
+    
+    // Reset form and refresh data
+    reset({
+      category: "",
+      amount: "",
+      month: selectedMonth.toString(),
+      year: selectedYear.toString()
+    });
+    setShowForm(false);
+    fetchData();
+    
+    toast({
+      title: 'Success',
+      description: 'Budget has been created successfully',
+      variant: 'default'
+    });
+  } catch (error) {
+    console.error('Error creating budget:', error);
+    toast({
+      title: 'Error',
+      description: 'Failed to create budget',
+      variant: 'destructive'
+    });
   }
+};
 
   // Delete a budget
   const handleDelete = async (id: string) => {
     setDeletingId(id)
     try {
       await axios.delete(`/api/budgets/${id}`)
-      
+
       // Update local state
       setBudgets(prev => prev.filter(budget => budget._id !== id))
-      
+
       toast({
         title: 'Success',
         description: 'Budget has been deleted',
         variant: 'default'
       })
-      
+
       // Refresh data
       fetchData()
     } catch (error) {
@@ -227,10 +243,10 @@ export default function BudgetsPage() {
             Set monthly budgets for each category and track your spending
           </p>
         </div>
-        
+
         <div className="flex items-center gap-4">
           <div className="flex items-center space-x-2">
-            <Select 
+            <Select
               defaultValue={selectedMonth.toString()}
               onValueChange={(value) => setSelectedMonth(parseInt(value))}
             >
@@ -245,8 +261,8 @@ export default function BudgetsPage() {
                 ))}
               </SelectContent>
             </Select>
-            
-            <Select 
+
+            <Select
               defaultValue={selectedYear.toString()}
               onValueChange={(value) => setSelectedYear(parseInt(value))}
             >
@@ -262,24 +278,32 @@ export default function BudgetsPage() {
               </SelectContent>
             </Select>
           </div>
-          
-          <Button
-            onClick={() => setShowForm(true)}
-            className="bg-green-600 hover:bg-green-700"
-            disabled={showForm || availableCategories.length === 0}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Budget
-          </Button>
+<Button
+  onClick={() => {
+    setShowForm(true);
+    // Reset the form to default values
+    reset({
+      category: "",
+      amount: "",
+      month: selectedMonth.toString(),
+      year: selectedYear.toString()
+    });
+  }}
+  className="bg-green-600 hover:bg-green-700"
+  disabled={showForm || availableCategories.length === 0}
+>
+  <Plus className="mr-2 h-4 w-4" />
+  Add Budget
+</Button>
         </div>
       </div>
-      
+
       <Tabs defaultValue="overview" className="mb-8">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="manage">Manage Budgets</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="overview" className="space-y-6">
           {budgetSummary.length === 0 ? (
             <Card>
@@ -294,13 +318,22 @@ export default function BudgetsPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex justify-center py-8">
-                  <Button
-                    onClick={() => setShowForm(true)}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Your First Budget
-                  </Button>
+                <Button
+  onClick={() => {
+    setShowForm(true);
+    // Reset the form to default values
+    reset({
+      category: "",
+      amount: "",
+      month: selectedMonth.toString(),
+      year: selectedYear.toString()
+    });
+  }}
+  className="bg-green-600 hover:bg-green-700"
+>
+  <Plus className="mr-2 h-4 w-4" />
+  Create Your First Budget
+</Button>
                 </div>
               </CardContent>
             </Card>
@@ -321,14 +354,14 @@ export default function BudgetsPage() {
                         margin={{ top: 20, right: 30, left: 20, bottom: 70 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                          dataKey="category" 
-                          angle={-45} 
-                          textAnchor="end" 
+                        <XAxis
+                          dataKey="category"
+                          angle={-45}
+                          textAnchor="end"
                           height={70}
                         />
                         <YAxis />
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value) => [`₹${value}`, undefined]}
                           labelFormatter={(label) => `Category: ${label}`}
                         />
@@ -337,9 +370,9 @@ export default function BudgetsPage() {
                         <Bar dataKey="Spent" fill="#10b981">
                           {
                             chartData.map((entry, index) => (
-                              <Cell 
-                                key={`cell-${index}`} 
-                                fill={getBarColor(entry.Budget, entry.Spent)} 
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={getBarColor(entry.Budget, entry.Spent)}
                               />
                             ))
                           }
@@ -349,7 +382,7 @@ export default function BudgetsPage() {
                   </div>
                 </CardContent>
               </Card>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {budgetSummary.map((item, index) => (
                   <Card key={index} className="overflow-hidden">
@@ -367,26 +400,24 @@ export default function BudgetsPage() {
                       </div>
                       <div className="flex justify-between items-center mb-4">
                         <span className="text-sm text-muted-foreground">Remaining:</span>
-                        <span 
-                          className={`font-medium ${
-                            item.remaining < 0 ? 'text-red-500' : 'text-green-500'
-                          }`}
+                        <span
+                          className={`font-medium ${item.remaining < 0 ? 'text-red-500' : 'text-green-500'
+                            }`}
                         >
                           ₹{item.remaining.toFixed(2)}
                         </span>
                       </div>
-                      
+
                       <div className="relative pt-1">
                         <div className="overflow-hidden h-2 text-xs flex rounded bg-gray-200">
                           <div
                             style={{ width: `${Math.min(100, item.percentage)}%` }}
-                            className={`shadow-none flex flex-col justify-center text-center whitespace-nowrap text-white ${
-                              item.percentage > 100 
-                                ? 'bg-red-500' 
-                                : item.percentage > 80 
-                                  ? 'bg-yellow-500' 
+                            className={`shadow-none flex flex-col justify-center text-center whitespace-nowrap text-white ${item.percentage > 100
+                                ? 'bg-red-500'
+                                : item.percentage > 80
+                                  ? 'bg-yellow-500'
                                   : 'bg-green-500'
-                            }`}
+                              }`}
                           ></div>
                         </div>
                         <div className="flex justify-between text-xs mt-1">
@@ -404,7 +435,7 @@ export default function BudgetsPage() {
             </>
           )}
         </TabsContent>
-        
+
         <TabsContent value="manage">
           {showForm && (
             <Card className="mb-6 border-green-200 bg-green-50">
@@ -417,37 +448,27 @@ export default function BudgetsPage() {
               <CardContent>
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Category Selection */}
                     <div className="space-y-2">
                       <Label htmlFor="category">Category</Label>
-                      <Select
+                      <select
+                        className="w-full px-3 py-2 bg-white border rounded-md"
+                        id="category"
                         {...register('category', { required: 'Category is required' })}
-                        onValueChange={(value) => {
-                          reset({ ...register(), category: value })
-                        }}
-                        defaultValue=""
                       >
-                        <SelectTrigger id="category">
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableCategories.length > 0 ? (
-                            availableCategories.map(category => (
-                              <SelectItem key={category} value={category}>
-                                {category}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            <SelectItem value="" disabled>
-                              All categories have budgets for this month
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
+                        <option value="">Select a category</option>
+                        {availableCategories.map(category => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
                       {errors.category && (
                         <p className="text-sm text-red-500">{errors.category.message}</p>
                       )}
                     </div>
-                    
+
+                    {/* Amount Input */}
                     <div className="space-y-2">
                       <Label htmlFor="amount">Budget Amount</Label>
                       <div className="relative">
@@ -457,15 +478,11 @@ export default function BudgetsPage() {
                           type="number"
                           step="0.01"
                           className="pl-10"
-                          {...register('amount', { 
+                          {...register('amount', {
                             required: 'Amount is required',
                             min: {
                               value: 0.01,
                               message: 'Amount must be greater than 0'
-                            },
-                            pattern: {
-                              value: /^\d+(\.\d{1,2})?$/,
-                              message: 'Amount can have up to 2 decimal places'
                             }
                           })}
                           placeholder="0.00"
@@ -475,252 +492,247 @@ export default function BudgetsPage() {
                         <p className="text-sm text-red-500">{errors.amount.message}</p>
                       )}
                     </div>
-                    
+
+                    {/* Month Selection */}
                     <div className="space-y-2">
                       <Label htmlFor="month">Month</Label>
-                      <Select
+                      <select
+                        className="w-full px-3 py-2 bg-white border rounded-md"
+                        id="month"
                         {...register('month', { required: 'Month is required' })}
-                        onValueChange={(value) => {
-                          reset({ ...register(), month: value })
-                        }}
-                        defaultValue={selectedMonth.toString()}
                       >
-                        <SelectTrigger id="month">
-                          <SelectValue placeholder="Select month" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {MONTHS.map((month, index) => (
-                            <SelectItem key={index + 1} value={(index + 1).toString()}>
-                              {month}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        {MONTHS.map((month, index) => (
+                          <option key={index + 1} value={(index + 1).toString()}>
+                            {month}
+                          </option>
+                        ))}
+                      </select>
                       {errors.month && (
                         <p className="text-sm text-red-500">{errors.month.message}</p>
                       )}
                     </div>
-                    
+
+                    {/* Year Selection */}
                     <div className="space-y-2">
                       <Label htmlFor="year">Year</Label>
-                      <Select
-                                                {...register('year', { required: 'Year is required' })}
-                                                onValueChange={(value) => {
-                                                  reset({ ...register(), year: value })
-                                                }}
-                                                defaultValue={selectedYear.toString()}
-                                              >
-                                                <SelectTrigger id="year">
-                                                  <SelectValue placeholder="Select year" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                  {yearOptions.map(year => (
-                                                    <SelectItem key={year} value={year.toString()}>
-                                                      {year}
-                                                    </SelectItem>
-                                                  ))}
-                                                </SelectContent>
-                                              </Select>
-                                              {errors.year && (
-                                                <p className="text-sm text-red-500">{errors.year.message}</p>
-                                              )}
-                                            </div>
-                                          </div>
-                                          
-                                          <div className="flex justify-end gap-3">
-                                            <Button 
-                                              type="button" 
-                                              variant="outline" 
-                                              onClick={() => setShowForm(false)}
-                                            >
-                                              Cancel
-                                            </Button>
-                                            <Button 
-                                              type="submit" 
-                                              className="bg-green-600 hover:bg-green-700"
-                                              disabled={isSubmitting}
-                                            >
-                                              {isSubmitting ? 'Saving...' : 'Save Budget'}
-                                            </Button>
-                                          </div>
-                                        </form>
-                                      </CardContent>
-                                    </Card>
-                                  )}
-                                  
-                                  {filteredBudgets.length === 0 && !showForm ? (
-                                    <Card>
-                                      <CardHeader>
-                                        <CardTitle className="flex items-center">
-                                          <AlertTriangle className="mr-2 h-5 w-5 text-amber-500" />
-                                          No Budgets Found
-                                        </CardTitle>
-                                        <CardDescription>
-                                          You haven't set up any budgets for {MONTHS[selectedMonth - 1]} {selectedYear}.
-                                        </CardDescription>
-                                      </CardHeader>
-                                      <CardContent className="flex justify-center py-8">
-                                        <Button
-                                          onClick={() => setShowForm(true)}
-                                          className="bg-green-600 hover:bg-green-700"
-                                        >
-                                          <Plus className="mr-2 h-4 w-4" />
-                                          Create Budget
-                                        </Button>
-                                      </CardContent>
-                                    </Card>
-                                  ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                      {filteredBudgets.map(budget => (
-                                        <Card key={budget._id}>
-                                          <CardHeader>
-                                            <CardTitle className="text-lg">{budget.category}</CardTitle>
-                                            <CardDescription>
-                                              {MONTHS[budget.month - 1]} {budget.year}
-                                            </CardDescription>
-                                          </CardHeader>
-                                          <CardContent>
-                                            <div className="text-3xl font-bold text-green-600">
-                                              ₹{budget.amount.toFixed(2)}
-                                            </div>
-                                            
-                                            {budgetSummary.find(s => s.category === budget.category) && (
-                                              <div className="mt-4">
-                                                <div className="text-sm text-muted-foreground mb-1">
-                                                  Spent: ₹{budgetSummary.find(s => s.category === budget.category)?.spent.toFixed(2) || '0.00'}
-                                                </div>
-                                                <div className="relative pt-1">
-                                                  <div className="overflow-hidden h-2 text-xs flex rounded bg-gray-200">
-                                                    <div
-                                                      style={{ 
-                                                        width: `${Math.min(100, budgetSummary.find(s => s.category === budget.category)?.percentage || 0)}%` 
-                                                      }}
-                                                      className={`shadow-none flex flex-col justify-center text-center whitespace-nowrap text-white ${
-                                                        (budgetSummary.find(s => s.category === budget.category)?.percentage || 0) > 100 
-                                                          ? 'bg-red-500' 
-                                                          : (budgetSummary.find(s => s.category === budget.category)?.percentage || 0) > 80 
-                                                            ? 'bg-yellow-500' 
-                                                            : 'bg-green-500'
-                                                      }`}
-                                                    ></div>
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </CardContent>
-                                          <CardFooter className="border-t pt-4 flex justify-between">
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                              onClick={() => handleDelete(budget._id)}
-                                              disabled={deletingId === budget._id}
-                                            >
-                                              {deletingId === budget._id ? (
-                                                <span>Deleting...</span>
-                                              ) : (
-                                                <>
-                                                  <Trash2 className="mr-2 h-4 w-4" />
-                                                  Delete
-                                                </>
-                                              )}
-                                            </Button>
-                                          </CardFooter>
-                                        </Card>
-                                      ))}
-                                    </div>
-                                  )}
-                                </TabsContent>
-                              </Tabs>
-                              
-                              {/* Insights Section */}
-                              {budgetSummary.length > 0 && (
-                                <Card className="mt-8">
-                                  <CardHeader>
-                                    <CardTitle>Spending Insights</CardTitle>
-                                    <CardDescription>
-                                      Analysis of your spending patterns for {MONTHS[selectedMonth - 1]} {selectedYear}
-                                    </CardDescription>
-                                  </CardHeader>
-                                  <CardContent className="space-y-4">
-                                    {/* Top spending categories */}
-                                    <div>
-                                      <h3 className="font-medium mb-2">Top Spending Categories</h3>
-                                      <div className="space-y-2">
-                                        {[...budgetSummary]
-                                          .sort((a, b) => b.spent - a.spent)
-                                          .slice(0, 3)
-                                          .map((category, index) => (
-                                            <div key={index} className="flex justify-between items-center">
-                                              <div className="flex items-center">
-                                                <span className={`inline-block w-4 h-4 rounded-full mr-2 ${
-                                                  index === 0 ? 'bg-red-500' : index === 1 ? 'bg-orange-500' : 'bg-yellow-500'
-                                                }`}></span>
-                                                <span>{category.category}</span>
-                                              </div>
-                                              <span className="font-medium">₹{category.spent.toFixed(2)}</span>
-                                            </div>
-                                          ))}
-                                      </div>
-                                    </div>
-                                    
-                                    {/* Budget status */}
-                                    <div>
-                                      <h3 className="font-medium mb-2">Budget Status</h3>
-                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                        <div className="bg-green-50 p-4 rounded-lg">
-                                          <div className="text-green-600 font-medium">Under Budget</div>
-                                          <div className="text-2xl font-bold">
-                                            {budgetSummary.filter(s => s.percentage < 80).length}
-                                          </div>
-                                          <div className="text-sm text-gray-500">categories</div>
-                                        </div>
-                                        
-                                        <div className="bg-yellow-50 p-4 rounded-lg">
-                                          <div className="text-yellow-600 font-medium">Near Limit</div>
-                                          <div className="text-2xl font-bold">
-                                            {budgetSummary.filter(s => s.percentage >= 80 && s.percentage <= 100).length}
-                                          </div>
-                                          <div className="text-sm text-gray-500">categories</div>
-                                        </div>
-                                        
-                                        <div className="bg-red-50 p-4 rounded-lg">
-                                          <div className="text-red-600 font-medium">Over Budget</div>
-                                          <div className="text-2xl font-bold">
-                                            {budgetSummary.filter(s => s.percentage > 100).length}
-                                          </div>
-                                          <div className="text-sm text-gray-500">categories</div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                    
-                                    {/* Recommendations */}
-                                    {budgetSummary.some(s => s.percentage > 100) && (
-                                      <div className="bg-blue-50 p-4 rounded-lg mt-4">
-                                        <h3 className="font-medium text-blue-700 mb-2">Recommendations</h3>
-                                        <ul className="list-disc list-inside text-sm space-y-1 text-gray-700">
-                                          {budgetSummary
-                                            .filter(s => s.percentage > 100)
-                                            .map((category, index) => (
-                                              <li key={index}>
-                                                Consider adjusting your budget for <strong>{category.category}</strong> as you're 
-                                                spending {Math.round(category.percentage - 100)}% more than budgeted.
-                                              </li>
-                                            ))}
-                                          {budgetSummary
-                                            .filter(s => s.percentage < 50 && s.budgeted > 0)
-                                            .map((category, index) => (
-                                              <li key={index}>
-                                                You're only using {Math.round(category.percentage)}% of your <strong>{category.category}</strong> budget. 
-                                                You might reallocate some to categories where you're over budget.
-                                              </li>
-                                            ))}
-                                        </ul>
-                                      </div>
-                                    )}
-                                  </CardContent>
-                                </Card>
-                              )}
-                            </div>
-                          )
-                        }
+                      <select
+                        className="w-full px-3 py-2 bg-white border rounded-md"
+                        id="year"
+                        {...register('year', { required: 'Year is required' })}
+                      >
+                        {yearOptions.map(year => (
+                          <option key={year} value={year.toString()}>
+                            {year}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.year && (
+                        <p className="text-sm text-red-500">{errors.year.message}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowForm(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="bg-green-600 hover:bg-green-700"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Saving...' : 'Save Budget'}
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          )}
+
+          {filteredBudgets.length === 0 && !showForm ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <AlertTriangle className="mr-2 h-5 w-5 text-amber-500" />
+                  No Budgets Found
+                </CardTitle>
+                <CardDescription>
+                  You haven't set up any budgets for {MONTHS[selectedMonth - 1]} {selectedYear}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex justify-center py-8">
+              <Button
+  onClick={() => {
+    setShowForm(true);
+    // Reset the form to default values
+    reset({
+      category: "",
+      amount: "",
+      month: selectedMonth.toString(),
+      year: selectedYear.toString()
+    });
+  }}
+  className="bg-green-600 hover:bg-green-700"
+>
+  <Plus className="mr-2 h-4 w-4" />
+  Create Budget
+</Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredBudgets.map(budget => (
+                <Card key={budget._id}>
+                  <CardHeader>
+                    <CardTitle className="text-lg">{budget.category}</CardTitle>
+                    <CardDescription>
+                      {MONTHS[budget.month - 1]} {budget.year}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-green-600">
+                      ₹{budget.amount.toFixed(2)}
+                    </div>
+
+                    {budgetSummary.find(s => s.category === budget.category) && (
+                      <div className="mt-4">
+                        <div className="text-sm text-muted-foreground mb-1">
+                          Spent: ₹{budgetSummary.find(s => s.category === budget.category)?.spent.toFixed(2) || '0.00'}
+                        </div>
+                        <div className="relative pt-1">
+                          <div className="overflow-hidden h-2 text-xs flex rounded bg-gray-200">
+                            <div
+                              style={{
+                                width: `${Math.min(100, budgetSummary.find(s => s.category === budget.category)?.percentage || 0)}%`
+                              }}
+                              className={`shadow-none flex flex-col justify-center text-center whitespace-nowrap text-white ${(budgetSummary.find(s => s.category === budget.category)?.percentage || 0) > 100
+                                  ? 'bg-red-500'
+                                  : (budgetSummary.find(s => s.category === budget.category)?.percentage || 0) > 80
+                                    ? 'bg-yellow-500'
+                                    : 'bg-green-500'
+                                }`}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                  <CardFooter className="border-t pt-4 flex justify-between">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => handleDelete(budget._id)}
+                      disabled={deletingId === budget._id}
+                    >
+                      {deletingId === budget._id ? (
+                        <span>Deleting...</span>
+                      ) : (
+                        <>
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Insights Section */}
+      {budgetSummary.length > 0 && (
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>Spending Insights</CardTitle>
+            <CardDescription>
+              Analysis of your spending patterns for {MONTHS[selectedMonth - 1]} {selectedYear}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Top spending categories */}
+            <div>
+              <h3 className="font-medium mb-2">Top Spending Categories</h3>
+              <div className="space-y-2">
+                {[...budgetSummary]
+                  .sort((a, b) => b.spent - a.spent)
+                  .slice(0, 3)
+                  .map((category, index) => (
+                    <div key={index} className="flex justify-between items-center">
+                      <div className="flex items-center">
+                        <span className={`inline-block w-4 h-4 rounded-full mr-2 ${index === 0 ? 'bg-red-500' : index === 1 ? 'bg-orange-500' : 'bg-yellow-500'
+                          }`}></span>
+                        <span>{category.category}</span>
+                      </div>
+                      <span className="font-medium">₹{category.spent.toFixed(2)}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Budget status */}
+            <div>
+              <h3 className="font-medium mb-2">Budget Status</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <div className="text-green-600 font-medium">Under Budget</div>
+                  <div className="text-2xl font-bold">
+                    {budgetSummary.filter(s => s.percentage < 80).length}
+                  </div>
+                  <div className="text-sm text-gray-500">categories</div>
+                </div>
+
+                <div className="bg-yellow-50 p-4 rounded-lg">
+                  <div className="text-yellow-600 font-medium">Near Limit</div>
+                  <div className="text-2xl font-bold">
+                    {budgetSummary.filter(s => s.percentage >= 80 && s.percentage <= 100).length}
+                  </div>
+                  <div className="text-sm text-gray-500">categories</div>
+                </div>
+
+                <div className="bg-red-50 p-4 rounded-lg">
+                  <div className="text-red-600 font-medium">Over Budget</div>
+                  <div className="text-2xl font-bold">
+                    {budgetSummary.filter(s => s.percentage > 100).length}
+                  </div>
+                  <div className="text-sm text-gray-500">categories</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Recommendations */}
+            {budgetSummary.some(s => s.percentage > 100) && (
+              <div className="bg-blue-50 p-4 rounded-lg mt-4">
+                <h3 className="font-medium text-blue-700 mb-2">Recommendations</h3>
+                <ul className="list-disc list-inside text-sm space-y-1 text-gray-700">
+                  {budgetSummary
+                    .filter(s => s.percentage > 100)
+                    .map((category, index) => (
+                      <li key={index}>
+                        Consider adjusting your budget for <strong>{category.category}</strong> as you're
+                        spending {Math.round(category.percentage - 100)}% more than budgeted.
+                      </li>
+                    ))}
+                  {budgetSummary
+                    .filter(s => s.percentage < 50 && s.budgeted > 0)
+                    .map((category, index) => (
+                      <li key={index}>
+                        You're only using {Math.round(category.percentage)}% of your <strong>{category.category}</strong> budget.
+                        You might reallocate some to categories where you're over budget.
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
